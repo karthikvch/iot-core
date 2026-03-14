@@ -1,4 +1,4 @@
-Trusted Platform Module
+Trusted Platform Module  (TPM/HSM)
 
 What TPM Means
 
@@ -12,6 +12,14 @@ So TPM is a security chip that stores cryptographic keys securely inside hardwar
 
 
 ------------------------------
+
+What HSM Means
+
+Hardware → a physical device
+
+Security → protects cryptographic operations and keys
+
+Module → a specialized component used for encryption tasks
 
 What TPM Does
 
