@@ -43,4 +43,30 @@ Convert message → JSON
    ↓
 Publish MQTT
    ↓
-AWS IoT Core                           
+AWS IoT Core       
+-----------------------
+Fleet Management Application (your cloud platform)
+        │
+        │ REST APIs / backend logic
+        ▼
+Device Management Layer
+        │
+        ├── OTA orchestration
+        ├── Fleet database
+        ├── Logs & telemetry
+        └── Device commands
+        │
+        ▼
+AWS IoT Core
+        │
+        ▼
+Vehicle (NUC)
+
+Python device agent
+      │
+      ├ Docker OTA
+      ├ Telemetry
+      ├ Command execution
+      └ Log upload
+
+
