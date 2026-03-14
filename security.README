@@ -1,0 +1,49 @@
+Trusted Platform Module
+
+What TPM Means
+
+Trusted → ensures the system is secure and verified
+
+Platform → refers to the device (computer, server, IoT device)
+
+Module → a hardware chip/module on the motherboard
+
+So TPM is a security chip that stores cryptographic keys securely inside hardware.
+
+
+------------------------------
+
+What TPM Does
+
+A TPM chip provides:
+
+Secure key storage
+Device identity
+Encryption support
+Secure boot validation
+Hardware-based authentication
+
+Instead of storing private keys in files like:
+
+/etc/certs/private.key
+
+the key is stored inside the TPM chip, where it cannot be extracted.
+
+Example in an IoT Device
+
+Example on a tractor edge computer:
+
+Intel NUC
+   │
+   ├ TPM chip
+   │
+   ▼
+Private key stored in TPM
+   │
+   ▼
+TLS authentication
+   │
+   ▼
+AWS IoT Core
+
+This improves security because the private key never leaves the hardware.
