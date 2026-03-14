@@ -1,0 +1,46 @@
+Edge Device
+Your Vehicle Architecture (Typical for Autonomous Machines)
+
+Based on what you described, the tractor probably has something like this:
+
+Vehicle  
+
+Sensors
+ ├─ Cameras
+ ├─ LiDAR
+ ├─ GPS
+ └─ IMU
+        │
+        ▼
+NVIDIA Xavier (Autonomy Computer)
+        │
+        │  ROS / ROS2 Topics
+        ▼
+Intel NUC (Edge Gateway)
+        │
+        ├─ Python Device Agent (systemd)
+        ├─ Telemetry service
+        └─ MQTT client
+        │
+        ▼
+AWS IoT Core
+        │
+        ▼
+Cloud Backend
+
+----------------------------------------                           
+ROS → Cloud Telemetry Bridge
+
+Your Python service probably acts as a ROS-to-MQTT bridge.
+
+Example flow:
+
+ROS Topic
+   ↓
+Python ROS node
+   ↓
+Convert message → JSON
+   ↓
+Publish MQTT
+   ↓
+AWS IoT Core                           
