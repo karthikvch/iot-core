@@ -1,0 +1,97 @@
+Yes 👍 FreeRTOS must be included (built and flashed) into the device firmware. But we don’t “install” it like software on a laptop. Instead, it becomes part of the firmware that runs on the microcontroller.
+
+How FreeRTOS Gets Onto the Device
+
+For a device using FreeRTOS, the typical workflow is:
+
+Developer downloads FreeRTOS source code
+
+Write application code (sensor reading, MQTT communication, etc.)
+
+Compile everything together (FreeRTOS + your code)
+
+Flash the compiled firmware to the microcontroller
+
+Developer Code
+      +
+FreeRTOS Kernel
+      +
+Drivers / Libraries
+      ↓
+Compiled Firmware (.bin / .hex)
+      ↓
+Flash to IoT Device
+
+So FreeRTOS becomes part of the device firmware.
+
+Example With an IoT Device
+
+Imagine an ESP32 IoT sensor.
+
+Firmware structure might look like:
+
+Firmware
+ ├── Bootloader
+ ├── FreeRTOS Kernel
+ ├── WiFi Driver
+ ├── MQTT Client
+ └── Application Tasks
+
+When the device powers on:
+
+Bootloader starts
+
+FreeRTOS kernel loads
+
+FreeRTOS starts running tasks
+
+Example FreeRTOS Task Code
+
+Example tasks running on the device:
+
+void sensorTask(void *params)
+{
+    while(1)
+    {
+        read_sensor();
+        vTaskDelay(1000);
+    }
+}
+
+void mqttTask(void *params)
+{
+    while(1)
+    {
+        send_data_to_cloud();
+        vTaskDelay(2000);
+    }
+}
+
+FreeRTOS schedules these tasks.
+
+When Using AWS IoT
+
+If the device connects to AWS IoT Core, the firmware may also include:
+
+MQTT library
+
+TLS security
+
+OTA update library
+
+Device shadow library
+
+These help the device communicate with AWS.
+
+Simple Way to Think About It
+Laptop → Install Windows/Linux
+IoT Device → Flash Firmware (with FreeRTOS inside)
+
+So:
+
+PCs install OS
+
+Microcontrollers flash firmware that contains FreeRTOS
+
+✅ Short answer:
+Yes, FreeRTOS runs on the device, but it is compiled into the firmware and flashed to the microcontroller, not installed like normal software.
