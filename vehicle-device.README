@@ -70,3 +70,26 @@ Python device agent
       └ Log upload
 
 
+--------------
+High-Level OTA Architecture
+Fleet Management Platform
+        │
+        │ OTA orchestration
+        ▼
+Update Service
+        │
+        ├── Version control
+        ├── Rollout stages
+        └── Monitoring
+        │
+        ▼
+Container Registry (images)
+        │
+        ▼
+AWS IoT Core (MQTT commands)
+        │
+        ▼
+Vehicle Device Agent
+        │
+        ▼
+Docker runtime
