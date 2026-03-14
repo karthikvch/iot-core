@@ -93,3 +93,26 @@ Vehicle Device Agent
         │
         ▼
 Docker runtime
+-----------------------------
+Overall Fleet Architecture
+
+From everything you described, your platform likely looks like:
+
+Fleet Management Platform
+        │
+        ├ Vehicle registry
+        ├ OTA orchestration
+        ├ Logs
+        └ Provisioning system
+        │
+        ▼
+AWS IoT Core
+        │
+        ▼
+Tractor (NUC)
+
+Python device agent
+Docker containers
+ROS nodes
+
+This is a very mature architecture.
