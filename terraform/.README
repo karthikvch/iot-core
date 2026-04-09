@@ -1,0 +1,20 @@
+certs/
+ ├── certificate.pem.crt
+ ├── private.pem.key
+ ├── AmazonRootCA1.pem   -- Common for All Devices    
+
+
+ We can get this : curl https://www.amazontrust.com/repository/AmazonRootCA1.pem -o certs/AmazonRootCA1.pem 
+
+
+ or 
+
+ 🔥 If you want Terraform to handle it (advanced)
+
+You can automate download using null_resource:
+
+resource "null_resource" "download_root_ca" {
+  provisioner "local-exec" {
+    command = "curl https://www.amazontrust.com/repository/AmazonRootCA1.pem -o ${path.module}/certs/AmazonRootCA1.pem"
+  }
+}
