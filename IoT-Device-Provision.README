@@ -1,0 +1,6 @@
+1. Create Thing
+2. Create Certificate
+3. Create Policy
+4. Attach Policy to Certificate
+5. Attach Certificate to Thing
+6. Connect Device (MQTT)
