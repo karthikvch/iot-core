@@ -1,0 +1,364 @@
+# device-side (Python) Fleet Provisioning flow for AWS IoT Core.
+
+This is the real onboarding logic your device will run
+
+# What this script will do
+Connect using claim certificate
+Request:
+New certificate
+Call provisioning template
+Receive:
+Thing name
+New cert
+Save new cert locally
+Reconnect using new cert
+
+📦 Install dependency
+pip install awsiotsdk
+
+# Python Fleet Provisioning Script
+
+
+import json
+import os
+from awscrt import io, mqtt
+from awsiot import mqtt_connection_builder
+
+# ----------------------------
+# CONFIG (UPDATE THESE)
+# ----------------------------
+ENDPOINT = "YOUR_ENDPOINT"   # from AWS IoT
+CLIENT_ID = "bootstrap-client"
+
+CLAIM_CERT = "certs/claim_certificate.pem.crt"
+CLAIM_KEY  = "certs/claim_private.pem.key"
+ROOT_CA    = "certs/AmazonRootCA1.pem"
+
+TEMPLATE_NAME = "YOUR_TEMPLATE_NAME"
+THING_NAME = "esp32-temp-001"
+
+# ----------------------------
+# MQTT connection (claim cert)
+# ----------------------------
+event_loop_group = io.EventLoopGroup(1)
+host_resolver = io.DefaultHostResolver(event_loop_group)
+client_bootstrap = io.ClientBootstrap(event_loop_group, host_resolver)
+
+mqtt_connection = mqtt_connection_builder.mtls_from_path(
+    endpoint=ENDPOINT,
+    cert_filepath=CLAIM_CERT,
+    pri_key_filepath=CLAIM_KEY,
+    client_bootstrap=client_bootstrap,
+    ca_filepath=ROOT_CA,
+    client_id=CLIENT_ID,
+    clean_session=False,
+    keep_alive_secs=30
+)
+
+print("Connecting with claim certificate...")
+mqtt_connection.connect().result()
+print("Connected!")
+
+# ----------------------------
+# Step 1: Create certificate
+# ----------------------------
+create_cert_topic = "$aws/certificates/create/json"
+create_cert_accepted = "$aws/certificates/create/json/accepted"
+
+certificate_data = {}
+
+def on_create_cert_accepted(topic, payload, **kwargs):
+    global certificate_data
+    print("Received new certificate!")
+    certificate_data = json.loads(payload)
+
+mqtt_connection.subscribe(
+    topic=create_cert_accepted,
+    qos=mqtt.QoS.AT_LEAST_ONCE,
+    callback=on_create_cert_accepted
+).result()
+
+mqtt_connection.publish(
+    topic=create_cert_topic,
+    payload="{}",
+    qos=mqtt.QoS.AT_LEAST_ONCE
+)
+
+# wait until cert received
+import time
+while not certificate_data:
+    time.sleep(1)
+
+# ----------------------------
+# Save new certificate
+# ----------------------------
+os.makedirs("certs/device", exist_ok=True)
+
+with open("certs/device/device_cert.pem.crt", "w") as f:
+    f.write(certificate_data["certificatePem"])
+
+with open("certs/device/device_private.pem.key", "w") as f:
+    f.write(certificate_data["privateKey"])
+
+# ----------------------------
+# Step 2: Register Thing
+# ----------------------------
+register_topic = f"$aws/provisioning-templates/{TEMPLATE_NAME}/provision/json"
+register_accepted = f"$aws/provisioning-templates/{TEMPLATE_NAME}/provision/json/accepted"
+
+provision_response = {}
+
+def on_register_accepted(topic, payload, **kwargs):
+    global provision_response
+    print("Provisioning successful!")
+    provision_response = json.loads(payload)
+
+mqtt_connection.subscribe(
+    topic=register_accepted,
+    qos=mqtt.QoS.AT_LEAST_ONCE,
+    callback=on_register_accepted
+).result()
+
+payload = {
+    "parameters": {
+        "ThingName": THING_NAME
+    }
+}
+
+mqtt_connection.publish(
+    topic=register_topic,
+    payload=json.dumps(payload),
+    qos=mqtt.QoS.AT_LEAST_ONCE
+)
+
+while not provision_response:
+    time.sleep(1)
+
+mqtt_connection.disconnect().result()
+
+print("Device provisioned successfully!")
+
+# ----------------------------
+# Step 3: Reconnect with new cert
+# ----------------------------
+print("Reconnecting with new device certificate...")
+
+mqtt_connection = mqtt_connection_builder.mtls_from_path(
+    endpoint=ENDPOINT,
+    cert_filepath="certs/device/device_cert.pem.crt",
+    pri_key_filepath="certs/device/device_private.pem.key",
+    client_bootstrap=client_bootstrap,
+    ca_filepath=ROOT_CA,
+    client_id=THING_NAME,
+    clean_session=False,
+    keep_alive_secs=30
+)
+
+mqtt_connection.connect().result()
+print("Connected with device certificate!")
+
+# ----------------------------
+# Test publish
+# ----------------------------
+mqtt_connection.publish(
+    topic=f"sensors/{THING_NAME}/data",
+    payload=json.dumps({"temp": 28}),
+    qos=mqtt.QoS.AT_LEAST_ONCE
+)
+
+print("Data published successfully!")
+
+
+
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+What is happening
+Phase 1:
+Claim cert → connect → request new cert
+Phase 2:
+Call provisioning template → AWS creates Thing
+Phase 3:
+Reconnect using new cert → secure MQTT
+
+# ----
+
+Next advanced upgrades
+
+Production level Required:
+
+🔐 Security
+Use TPM / secure element  
+Encrypt filesystem
+⚙️ Device management
+OTA updates
+Device shadow
+📊 Monitoring
+CloudWatch logs
+IoT rules → S3 / DynamoDB
+
+# ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+#### Updated script 
+# 1. Auto-generate ThingName (MAC-based)
+# 2. Run provisioning ONLY once
+# 3. Secure certificate storage   ->  Restrict file permissions (Linux) -> chmod 600 certs/device/*
+##
+import json
+import os
+import time
+import uuid
+from awscrt import io, mqtt
+from awsiot import mqtt_connection_builder
+
+# ----------------------------
+# CONFIG
+# ----------------------------
+ENDPOINT = "YOUR_ENDPOINT"
+ROOT_CA = "certs/AmazonRootCA1.pem"
+
+CLAIM_CERT = "certs/claim_certificate.pem.crt"
+CLAIM_KEY = "certs/claim_private.pem.key"
+
+DEVICE_CERT = "certs/device/device_cert.pem.crt"
+DEVICE_KEY = "certs/device/device_private.pem.key"
+
+TEMPLATE_NAME = "YOUR_TEMPLATE_NAME"
+
+# ----------------------------
+# Helpers
+# ----------------------------
+def get_thing_name():
+    mac = hex(uuid.getnode())[2:]
+    return f"device-{mac}"
+
+THING_NAME = get_thing_name()
+
+def is_provisioned():
+    return os.path.exists(DEVICE_CERT)
+
+# ----------------------------
+# MQTT builder
+# ----------------------------
+def create_connection(cert, key, client_id):
+    event_loop_group = io.EventLoopGroup(1)
+    host_resolver = io.DefaultHostResolver(event_loop_group)
+    client_bootstrap = io.ClientBootstrap(event_loop_group, host_resolver)
+
+    return mqtt_connection_builder.mtls_from_path(
+        endpoint=ENDPOINT,
+        cert_filepath=cert,
+        pri_key_filepath=key,
+        client_bootstrap=client_bootstrap,
+        ca_filepath=ROOT_CA,
+        client_id=client_id,
+        clean_session=False,
+        keep_alive_secs=30
+    )
+
+# ----------------------------
+# Provisioning Logic
+# ----------------------------
+def provision_device():
+    print("Starting provisioning...")
+
+    mqtt_conn = create_connection(CLAIM_CERT, CLAIM_KEY, "bootstrap-client")
+    mqtt_conn.connect().result()
+
+    cert_data = {}
+
+    def on_cert(topic, payload, **kwargs):
+        nonlocal cert_data
+        cert_data = json.loads(payload)
+
+    mqtt_conn.subscribe(
+        "$aws/certificates/create/json/accepted",
+        mqtt.QoS.AT_LEAST_ONCE,
+        on_cert
+    ).result()
+
+    mqtt_conn.publish(
+        "$aws/certificates/create/json",
+        "{}",
+        mqtt.QoS.AT_LEAST_ONCE
+    )
+
+    while not cert_data:
+        time.sleep(1)
+
+    os.makedirs("certs/device", exist_ok=True)
+
+    with open(DEVICE_CERT, "w") as f:
+        f.write(cert_data["certificatePem"])
+
+    with open(DEVICE_KEY, "w") as f:
+        f.write(cert_data["privateKey"])
+
+    # Register Thing
+    prov_data = {}
+
+    def on_prov(topic, payload, **kwargs):
+        nonlocal prov_data
+        prov_data = json.loads(payload)
+
+    mqtt_conn.subscribe(
+        f"$aws/provisioning-templates/{TEMPLATE_NAME}/provision/json/accepted",
+        mqtt.QoS.AT_LEAST_ONCE,
+        on_prov
+    ).result()
+
+    payload = {
+        "parameters": {
+            "ThingName": THING_NAME
+        }
+    }
+
+    mqtt_conn.publish(
+        f"$aws/provisioning-templates/{TEMPLATE_NAME}/provision/json",
+        json.dumps(payload),
+        mqtt.QoS.AT_LEAST_ONCE
+    )
+
+    while not prov_data:
+        time.sleep(1)
+
+    mqtt_conn.disconnect().result()
+    print("Provisioning complete!")
+
+# ----------------------------
+# MQTT Runtime
+# ----------------------------
+def run_device():
+    mqtt_conn = create_connection(DEVICE_CERT, DEVICE_KEY, THING_NAME)
+    mqtt_conn.connect().result()
+
+    print("Connected as:", THING_NAME)
+
+    # Subscribe to commands
+    def on_message(topic, payload, **kwargs):
+        print("Received command:", payload)
+
+    mqtt_conn.subscribe(
+        f"sensors/{THING_NAME}/cmd",
+        mqtt.QoS.AT_LEAST_ONCE,
+        on_message
+    ).result()
+
+    while True:
+        data = {"temp": 25}
+
+        mqtt_conn.publish(
+            f"sensors/{THING_NAME}/data",
+            json.dumps(data),
+            mqtt.QoS.AT_LEAST_ONCE
+        )
+
+        print("Published:", data)
+        time.sleep(5)
+
+# ----------------------------
+# MAIN
+# ----------------------------
+if not is_provisioned():
+    provision_device()
+
+run_device()

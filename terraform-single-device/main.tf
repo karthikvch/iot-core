@@ -7,6 +7,15 @@ resource "aws_iot_thing" "device" {
   name = var.thing_name
 }
 
+/*
+resource "aws_iot_thing" "device" {
+  count = 10
+  name  = "sensor-${count.index}"
+}
+👉 Creates:
+sensor-0, sensor-1, sensor-2...
+*/
+
 # Create Certificate (ACTIVE)
 resource "aws_iot_certificate" "cert" {
   active = true

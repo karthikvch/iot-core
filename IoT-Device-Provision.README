@@ -4,3 +4,12 @@
 4. Attach Policy to Certificate
 5. Attach Certificate to Thing
 6. Connect Device (MQTT)
+
+
+Types of Provisioning :
+
+✅ Terraform for multiple devices (loop-based)  - Single and with Loop multiple
+✅ Full Fleet Provisioning setup (step-by-step)
+
+
+✅ TPM-based secure onboarding (you asked earlier)
