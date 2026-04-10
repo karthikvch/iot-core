@@ -1,0 +1,66 @@
+### Fleet Provisioning (REAL production) ####
+👉 Devices generate certs by themselves
+
+Flow:
+Device gets a bootstrap (claim) certificate
+Device connects to AWS IoT
+Calls provisioning API
+AWS:
+Creates Thing
+Generates certificate
+Attaches policy
+Device stores new cert and uses it permanently
+--------------------------------------------
+
+![alt text](Fleetprovision.png)
+
+🔹 Step 1: Create a Claim Certificate
+One shared certificate for all devices (temporary)
+🔹 Step 2: Embed claim cert in device firmware
+
+👉 Same cert for all devices (easy to deploy)
+
+🔹 Step 3: Device connects to AWS IoT
+Using:
+Claim certificate
+🔹 Step 4: Device requests provisioning
+Sends:
+Device ID (serial number / MAC)
+
+🔹 Step 5: AWS creates:
+Thing
+Unique certificate
+Policy
+
+🔹 Step 6: Device stores new cert locally
+
+👉 Now becomes permanent identity
+
+🔹 Step 7: Device reconnects using new cert
+
+👉 Now fully secure MQTT
+
+## ---------------------------------------
+
+Migration HTTPs to MQTT
+
+You can do hybrid migration:
+
+Phase 1:
+Device calls your API
+API returns: Claim cert OR provisioning trigger
+
+Phase 2:
+Device switches to MQTT
+
+👍 What you need to implement
+✅ On AWS side:
+Provisioning template
+Claim certificate
+IoT policy
+✅ On device side:
+Store:
+Claim cert (temporary)
+After provisioning:
+Store permanent cert
+

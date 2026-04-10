@@ -1,0 +1,103 @@
+# You can create multiple devices (Things) using loops instead of repeating code.
+
+We’ll create:
+
+Thing
+Certificate
+Policy attachment
+
+👉 All using for_each loop
+
+🧱 1. Define device list (variables)
+variable "devices" {
+  default = [
+    "esp32-temp-001",
+    "esp32-temp-002",
+    "esp32-temp-003"
+  ]
+}
+🧱 2. Create Things (loop)
+resource "aws_iot_thing" "devices" {
+  for_each = toset(var.devices)
+
+  name = each.value
+
+  attributes = {
+    type = "temperature"
+  }
+}
+🧱 3. Create Certificates (loop)
+resource "aws_iot_certificate" "certs" {
+  for_each = toset(var.devices)
+
+  active = true
+}
+🧱 4. Create ONE shared policy
+resource "aws_iot_policy" "sensor_policy" {
+  name = "sensor-device-policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = "iot:Connect",
+        Resource = "arn:aws:iot:ap-south-1:YOUR_ACCOUNT_ID:client/\${iot:Connection.Thing.ThingName}"
+      },
+      {
+        Effect = "Allow",
+        Action = ["iot:Publish"],
+        Resource = "arn:aws:iot:ap-south-1:YOUR_ACCOUNT_ID:topic/sensors/\${iot:Connection.Thing.ThingName}/data"
+      },
+      {
+        Effect = "Allow",
+        Action = ["iot:Subscribe"],
+        Resource = "arn:aws:iot:ap-south-1:YOUR_ACCOUNT_ID:topicfilter/sensors/\${iot:Connection.Thing.ThingName}/cmd"
+      },
+      {
+        Effect = "Allow",
+        Action = ["iot:Receive"],
+        Resource = "arn:aws:iot:ap-south-1:YOUR_ACCOUNT_ID:topic/sensors/\${iot:Connection.Thing.ThingName}/cmd"
+      }
+    ]
+  })
+}
+🧱 5. Attach policy to certificates
+resource "aws_iot_policy_attachment" "attach_policy" {
+  for_each = aws_iot_certificate.certs
+
+  policy = aws_iot_policy.sensor_policy.name
+  target = each.value.arn
+}
+🧱 6. Attach certificate to Thing
+resource "aws_iot_thing_principal_attachment" "attach_cert" {
+  for_each = aws_iot_certificate.certs
+
+  thing     = each.key
+  principal = each.value.arn
+}
+🧠 How this works
+Example:
+
+For this input:
+
+devices = ["esp32-temp-001", "esp32-temp-002"]
+
+Terraform creates:
+
+Thing	Certificate	Policy
+esp32-temp-001	✔	shared
+esp32-temp-002	✔	shared
+
+
+Note:
+Terraform generates certs, but:
+Private keys are sensitive
+Store them securely (S3 / local secure storage)
+
+Note: 
+You must move:
+device.pem.crt
+private.pem.key
+AmazonRootCA1.pem
+👉 Into your device file system

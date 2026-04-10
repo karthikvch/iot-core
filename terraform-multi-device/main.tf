@@ -1,0 +1,180 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+    local = {
+      source = "hashicorp/local"
+    }
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+}
+
+# -----------------------------
+# IAM Role for Fleet Provisioning
+# -----------------------------
+resource "aws_iam_role" "iot_provisioning_role" {
+  name = "iot_fleet_provisioning_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "iot.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "iot_provisioning_policy" {
+  name = "iot_fleet_provisioning_policy"
+  role = aws_iam_role.iot_provisioning_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "iot:CreateThing",
+          "iot:CreateKeysAndCertificate",
+          "iot:AttachPolicy",
+          "iot:AttachThingPrincipal"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# -----------------------------
+# Device Policy (applied to new devices)
+# -----------------------------
+resource "aws_iot_policy" "device_policy" {
+  name = var.device_policy_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = "iot:*"
+      Resource = "*"
+    }]
+  })
+}
+
+# -----------------------------
+# Fleet Provisioning Template
+# -----------------------------
+resource "aws_iot_provisioning_template" "fleet_template" {
+  name = var.template_name
+
+  provisioning_role_arn = aws_iam_role.iot_provisioning_role.arn
+  enabled               = true
+
+  template_body = jsonencode({
+    Parameters = {
+      ThingName = {
+        Type = "String"
+      }
+    }
+
+    Resources = {
+      thing = {
+        Type = "AWS::IoT::Thing"
+        Properties = {
+          ThingName = { Ref = "ThingName" }
+        }
+      }
+
+      certificate = {
+        Type = "AWS::IoT::Certificate"
+        Properties = {
+          CertificateId = { Ref = "AWS::IoT::Certificate::Id" }
+          Status        = "ACTIVE"
+        }
+      }
+
+      policy = {
+        Type = "AWS::IoT::Policy"
+        Properties = {
+          PolicyName = var.device_policy_name
+        }
+      }
+    }
+  })
+}
+
+# -----------------------------
+# Claim Certificate (Bootstrap)
+# -----------------------------
+resource "aws_iot_certificate" "claim_cert" {
+  active = true
+}
+
+# Claim Policy (used only for provisioning)
+resource "aws_iot_policy" "claim_policy" {
+  name = "claim_policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "iot:Connect",
+        "iot:Publish",
+        "iot:Receive",
+        "iot:Subscribe"
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
+resource "aws_iot_policy_attachment" "claim_attach" {
+  policy = aws_iot_policy.claim_policy.name
+  target = aws_iot_certificate.claim_cert.arn
+}
+
+# -----------------------------
+# Save certificates locally
+# -----------------------------
+resource "local_file" "claim_cert_file" {
+  content  = aws_iot_certificate.claim_cert.certificate_pem
+  filename = "${path.module}/certs/claim_certificate.pem.crt"
+}
+
+resource "local_file" "claim_private_key" {
+  content  = aws_iot_certificate.claim_cert.private_key
+  filename = "${path.module}/certs/claim_private.pem.key"
+}
+
+# -----------------------------
+# Download Root CA
+# -----------------------------
+resource "null_resource" "download_root_ca" {
+  provisioner "local-exec" {
+    command = "curl -s https://www.amazontrust.com/repository/AmazonRootCA1.pem -o ${path.module}/certs/AmazonRootCA1.pem"
+  }
+}
+
+# -----------------------------
+# Outputs
+# -----------------------------
+output "template_name" {
+  value = aws_iot_provisioning_template.fleet_template.name
+}
+
+output "claim_certificate_path" {
+  value = "${path.module}/certs/claim_certificate.pem.crt"
+}
+
+output "claim_private_key_path" {
+  value = "${path.module}/certs/claim_private.pem.key"
+}
