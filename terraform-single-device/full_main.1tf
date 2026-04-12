@@ -1,0 +1,185 @@
+provider "aws" {
+  region = var.aws_region
+}
+
+# -----------------------------
+# IoT Thing + Certificate Setup
+# -----------------------------
+resource "aws_iot_thing" "device" {
+  name = var.thing_name
+}
+
+resource "aws_iot_certificate" "cert" {
+  active = true
+}
+
+resource "aws_iot_policy" "policy" {
+  name = "${var.thing_name}_policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "iot:*"
+      Resource = "*"
+    }]
+  })
+}
+
+resource "aws_iot_policy_attachment" "policy_attach" {
+  policy = aws_iot_policy.policy.name
+  target = aws_iot_certificate.cert.arn
+}
+
+resource "aws_iot_thing_principal_attachment" "thing_attach" {
+  thing     = aws_iot_thing.device.name
+  principal = aws_iot_certificate.cert.arn
+}
+
+# -----------------------------
+# Save Certificates Locally
+# -----------------------------
+resource "local_file" "cert" {
+  content  = aws_iot_certificate.cert.certificate_pem
+  filename = "${path.module}/certs/certificate.pem.crt"
+}
+
+resource "local_file" "private_key" {
+  content  = aws_iot_certificate.cert.private_key
+  filename = "${path.module}/certs/private.pem.key"
+}
+
+# -----------------------------
+# S3 Bucket
+# -----------------------------
+resource "aws_s3_bucket" "iot_bucket" {
+  bucket = "my-iot-firehose-bucket"
+}
+
+# -----------------------------
+# IAM Role: Firehose → S3
+# -----------------------------
+resource "aws_iam_role" "firehose_role" {
+  name = "firehose_to_s3_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "firehose.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "firehose_policy" {
+  role = aws_iam_role.firehose_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "s3:PutObject",
+        "s3:PutObjectAcl",
+        "s3:ListBucket"
+      ]
+      Resource = [
+        aws_s3_bucket.iot_bucket.arn,
+        "${aws_s3_bucket.iot_bucket.arn}/*"
+      ]
+    }]
+  })
+}
+
+# -----------------------------
+# Firehose Delivery Stream
+# -----------------------------
+resource "aws_kinesis_firehose_delivery_stream" "iot_stream" {
+  name        = "iot-firehose-stream"
+  destination = "extended_s3"
+
+  extended_s3_configuration {
+    role_arn   = aws_iam_role.firehose_role.arn
+    bucket_arn = aws_s3_bucket.iot_bucket.arn
+
+    buffering_size     = 5
+    buffering_interval = 60
+
+    compression_format = "GZIP"
+
+    prefix = "dt=!{timestamp:yyyy-MM-dd}/hour=!{timestamp:HH}/"
+    error_output_prefix = "errors/"
+  }
+}
+
+# -----------------------------
+# IAM Role: IoT → Firehose
+# -----------------------------
+resource "aws_iam_role" "iot_firehose_role" {
+  name = "iot_to_firehose_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "iot.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "iot_firehose_policy" {
+  role = aws_iam_role.iot_firehose_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "firehose:PutRecord",
+        "firehose:PutRecordBatch"
+      ]
+      Resource = aws_kinesis_firehose_delivery_stream.iot_stream.arn
+    }]
+  })
+}
+
+# -----------------------------
+# IoT Rule → Firehose
+# -----------------------------
+resource "aws_iot_topic_rule" "iot_to_firehose" {
+  name        = "iot_to_firehose_rule"
+  enabled     = true
+
+  sql = "SELECT * FROM 'devices/+/heartbeat'"
+  sql_version = "2016-03-23"
+
+  firehose {
+    role_arn             = aws_iam_role.iot_firehose_role.arn
+    delivery_stream_name = aws_kinesis_firehose_delivery_stream.iot_stream.name
+    separator            = "\n"
+  }
+}
+
+# -----------------------------
+# Outputs
+# -----------------------------
+output "certificate_pem" {
+  value     = aws_iot_certificate.cert.certificate_pem
+  sensitive = true
+}
+
+output "private_key" {
+  value     = aws_iot_certificate.cert.private_key
+  sensitive = true
+}
+
+output "public_key" {
+  value     = aws_iot_certificate.cert.public_key
+  sensitive = true
+}

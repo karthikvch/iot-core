@@ -29,8 +29,8 @@ resource "aws_iot_policy" "policy" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect = "Allow"
-        Action = "iot:*"
+        Effect   = "Allow"
+        Action   = "iot:*"
         Resource = "*"
       }
     ]
@@ -51,7 +51,7 @@ resource "aws_iot_thing_principal_attachment" "thing_attach" {
 
 # Output certificate and keys
 output "certificate_pem" {
-  value = aws_iot_certificate.cert.certificate_pem
+  value     = aws_iot_certificate.cert.certificate_pem
   sensitive = true
 }
 
@@ -61,7 +61,7 @@ output "private_key" {
 }
 
 output "public_key" {
-  value = aws_iot_certificate.cert.public_key
+  value     = aws_iot_certificate.cert.public_key
   sensitive = true
 }
 # 🔥 ADD BELOW THIS (at bottom)

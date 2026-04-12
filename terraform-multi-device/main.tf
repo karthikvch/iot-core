@@ -39,20 +39,31 @@ resource "aws_iam_role_policy" "iot_provisioning_policy" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
+
+      # 🔹 IoT actions
       {
         Effect = "Allow"
         Action = [
           "iot:CreateThing",
           "iot:CreateKeysAndCertificate",
           "iot:AttachPolicy",
-          "iot:AttachThingPrincipal"
+          "iot:AttachThingPrincipal",
+          "iot:DescribeThing",
+          "iot:DescribeCertificate",
+          "iot:GetPolicy"
         ]
+        Resource = "*"
+      },
+
+      # 🔥 CRITICAL (often missing)
+      {
+        Effect = "Allow"
+        Action = "iam:PassRole"
         Resource = "*"
       }
     ]
   })
 }
-
 # -----------------------------
 # Device Policy (applied to new devices)
 # -----------------------------
@@ -86,18 +97,18 @@ resource "aws_iot_provisioning_template" "fleet_template" {
     }
 
     Resources = {
-      thing = {
-        Type = "AWS::IoT::Thing"
-        Properties = {
-          ThingName = { Ref = "ThingName" }
-        }
-      }
 
       certificate = {
         Type = "AWS::IoT::Certificate"
         Properties = {
           CertificateId = { Ref = "AWS::IoT::Certificate::Id" }
           Status        = "ACTIVE"
+        }
+      }
+      thing = {
+        Type = "AWS::IoT::Thing"
+        Properties = {
+          ThingName = { Ref = "ThingName" }
         }
       }
 
@@ -110,7 +121,6 @@ resource "aws_iot_provisioning_template" "fleet_template" {
     }
   })
 }
-
 # -----------------------------
 # Claim Certificate (Bootstrap)
 # -----------------------------

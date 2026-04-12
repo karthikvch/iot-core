@@ -1,3 +1,41 @@
+QoS(Quality of Service) defines how reliably a message is delivered between device and cloud.
+
+1.  QoS 0 — “Fire and Forget”
+2.  QoS 1 — “At least once”    - That’s how production IoT systems are built
+3.  QoS 2 — “Exactly once” (Highest level)   - Expensive - mostly used in critical systems like payments etc  its  slow more network overhead.
+
+QoS 1 :  recomaned.
+How it works
+Device sends message
+Broker sends ACK (PUBACK)
+If no ACK → resend
+📌 Key points
+✔ Guaranteed delivery
+❗ May deliver duplicate messages
+Note: to eliminate duplicate use : Use device + timestamp as unique key
+
+----------------------------------
+
+QoS 0 → fast but risky
+QoS 1 → reliable (use this ✅)
+QoS 2 → perfect but NOT supported in AWS IoT  -  “Processed exactly once”
+
+
+Scenario	Use QoS
+Sensor data (temperature, logs)	QoS 0 or 1
+Most IoT apps	QoS 1 ✅                      
+Critical commands (banking, robotics)	QoS 2
+
+
+
+
+Important for AWS IoT
+AWS IoT Core supports MQTT 5 partially
+AWSIoTPythonSDK → mostly uses MQTT 3.1.1
+So you usually don’t need MQTT 5 properties
+
+
+
 certs/
  ├── certificate.pem.crt
  ├── private.pem.key
